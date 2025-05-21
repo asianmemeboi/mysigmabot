@@ -6,9 +6,18 @@
 #include <WiFiUdp.h>
 #include <ArduinoMDNS.h>
 
+#define tl 0
+#define tr 1
+#define bl 2
+#define br 3
+
 char ssid[] = "PRIS_Student";
 char pass[] = "wearethebest1";
-char hostname[] = "example"; //Your hostname in lowercase
+char hostname[] = "andrew"; //Your hostname in lowercase
+
+int axisfloat;
+float valuefloat;
+
 
 WiFiUDP udp;
 MDNS mdns(udp);
@@ -16,7 +25,7 @@ MDNS mdns(udp);
 WiFiServer server(80);
 int status = WL_IDLE_STATUS; //Added to allow the Giga to connect to PRIS_Student
 
-String terminalText = "Example Text"; //Use as the container for the text you want displayed in the terminal
+String terminalText = "sigma"; //Use as the container for the text you want displayed in the terminal
 
 const char htmlPage[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -27,7 +36,7 @@ const char htmlPage[] PROGMEM = R"rawliteral(
         let lastKeys = new Set();
         let lastGamepadState = {};
         var log = "";
-    
+
         function updateTerminal() {
           fetch('/terminal')
           .then(response => response.text())
@@ -37,12 +46,12 @@ const char htmlPage[] PROGMEM = R"rawliteral(
               document.getElementById("terminalData").scrollTop = document.getElementById("terminalData").scrollHeight; //Auto-scroll to the bottom of the textbox
           });
         }
-        setInterval(updateTerminal, 1000); // Update every second
+        setInterval(updateTerminal, 5000); // Update every second
 
         function clearTerminal() {
             log = ""; //Clears the terminal
         }
-        
+
         function updateData() {
           fetch('/data')
           .then(response => response.text())
@@ -50,57 +59,53 @@ const char htmlPage[] PROGMEM = R"rawliteral(
               document.getElementById("sensorValue").innerText = data;
           });
         }
-        setInterval(updateData, 1000); // Update every second
+        // setInterval(updateData, 1000); // Update every second
 
         function sendData(endpoint, data) {
           let query = Object.keys(data).map(key => key + "=" + encodeURIComponent(data[key])).join("&");
           let url = endpoint + "?" + query;
-    
-          // Use sendBeacon for better performance
-          let blob = new Blob([query], {type: 'application/x-www-form-urlencoded'});
-          if (!navigator.sendBeacon(url, blob)) {
-            fetch(url, { method: "GET", cache: "no-store" }).catch(err => console.error("Fetch failed:", err));
-          }
+
+          fetch(url, { method: "GET", cache: "no-store" });
         }
-    
+
         document.addEventListener("keydown", function(event) {
           sendData("/keypress", {char: event.key});
         });
-    
+
         document.addEventListener("keyup", function(event) {
           lastKeys.delete(event.key);
         });
-    
+
         window.addEventListener("gamepadconnected", function(event) {
           console.log("Gamepad connected:", event.gamepad.id);
           setInterval(checkGamepad, 200);
         });
-    
+
         function checkGamepad() {
           let gamepads = navigator.getGamepads();
           if (!gamepads) return;
-    
+
           for (let i = 0; i < gamepads.length; i++) {
             let gp = gamepads[i];
             if (!gp) continue;
-    
+
             let newState = {};
-    
+
             gp.buttons.forEach((button, index) => {
               if (button.pressed && !lastGamepadState[index]) {
                 sendData("/gamepad", {button: index});
               }
               newState[index] = button.pressed;
             });
-    
+
             gp.axes.forEach((value, index) => {
               let roundedValue = value.toFixed(2);
-              if (lastGamepadState[`axis${index}`] !== roundedValue) {
+              if (lastGamepadState[axis${index}] !== roundedValue) {
                 sendData("/gamepad", {axis: index, value: roundedValue});
               }
-              newState[`axis${index}`] = roundedValue;
+              newState[axis${index}] = roundedValue;
             });
-    
+
             lastGamepadState = newState;
           }
         }
@@ -131,6 +136,7 @@ const char htmlPage[] PROGMEM = R"rawliteral(
   </body>
   </html>
 )rawliteral";
+
 
 void sendResponse(WiFiClient& client, const String& contentType, const String& content) {
     client.println("HTTP/1.1 200 OK");
@@ -169,6 +175,8 @@ void handleRequest(WiFiClient& client, const String& request) {
   if (axisPos >= 0 && valuePos >= 0) {
     String axis = request.substring(axisPos + 5, request.indexOf(" ", axisPos));
     String value = request.substring(valuePos + 6, request.indexOf(" ", valuePos));
+    axisfloat = axis.toInt();
+    valuefloat = value.toFloat();
     Serial.print("Gamepad Axis ");
     Serial.print(axis);
     Serial.print(": ");
@@ -231,9 +239,15 @@ void handleRequest(WiFiClient& client, const String& request) {
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
+  pinMode(2, OUTPUT);
+  pinMode(3, OUTPUT);
+  pinMode(4, OUTPUT);
+  pinMode(6, OUTPUT);
+  pinMode(7, OUTPUT);
+  pinMode(8, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(13, OUTPUT);
+  digitalWrite(7, LOW);
   
   // check for the WiFi module:
   if (WiFi.status() == WL_NO_SHIELD) {
@@ -263,13 +277,21 @@ void setup() {
 }
 
 void loop() {
-  mdns.run();
+  // mdns.run();
   WiFiClient client = server.available();
   if(client){
     String request = client.readStringUntil('\r');
     handleRequest(client, request);
     client.stop();
   }
+
+  // motorSigma(tr, 250);
+  // motorSigma(tl, 250);
+  // motorSigma(bl, 250);
+  // motorSigma(br, 250);
+
+  motorControl();
+  
 }
 
 void printWifiStatus() {
@@ -291,4 +313,78 @@ void printWifiStatus() {
   Serial.print("Signal strength (RSSI):");
   Serial.print(rssi);
   Serial.println(" dBm");
+}
+
+void motorSigma(int motor, int speed) {
+  int pin1;
+  int pin2;
+
+  switch (motor) {
+    case tl:
+      pin1 = 2;
+      pin2 = 3;
+      break;
+
+    case tr:
+      pin1 = 6;
+      pin2 = 4;
+      break;
+
+    case br:
+      pin1 = 13;
+      pin2 = 7;
+      break;
+    
+    case bl:
+      pin1 = 9;
+      pin2 = 8;
+      break;
+
+  }
+
+  if (speed >= 0) {
+    analogWrite(pin1, speed);
+    analogWrite(pin2, 0);
+  } else {
+    analogWrite(pin2, speed*-1);
+    analogWrite(pin1, 0);
+  }
+
+}
+
+void motorControl() {
+  // Persistent variables to store axis values
+  static float lastForwardSpeed = 0;
+  static float lastStrafeSpeed = 0;
+  static float lastTurnSpeed = 0;
+  
+  // Update the appropriate axis value
+  if (axisfloat == 1) {
+    lastForwardSpeed = map(valuefloat, -1.0, 1.0, 255, -255);
+  }
+  else if (axisfloat == 0) {
+    lastStrafeSpeed = map(valuefloat, -1.0, 1.0, -255, 255);
+  }
+  else if (axisfloat == 2) {
+    lastTurnSpeed = map(valuefloat, -1.0, 1.0, -255, 255); // Negative for left turn, positive for right turn
+  }
+  // Calculate final speeds using the persistent values by combining forward, strafe, and turning motion  // For forward motion: all wheels same direction
+  // For strafe motion: diagonal wheels move together, sides opposite
+  // For turning: left side and right side move in opposite directions
+  int tlSpeed = lastForwardSpeed - lastStrafeSpeed - lastTurnSpeed;  // Top Left
+  int trSpeed = lastForwardSpeed + lastStrafeSpeed + lastTurnSpeed;  // Top Right
+  int blSpeed = lastForwardSpeed + lastStrafeSpeed - lastTurnSpeed;  // Bottom Left
+  int brSpeed = lastForwardSpeed - lastStrafeSpeed + lastTurnSpeed;  // Bottom Right
+
+  // Constrain speeds to valid PWM range (-255 to 255)
+  tlSpeed = constrain(tlSpeed, -255, 255);
+  trSpeed = constrain(trSpeed, -255, 255);
+  blSpeed = constrain(blSpeed, -255, 255);
+  brSpeed = constrain(brSpeed, -255, 255);
+
+  // Apply the calculated speeds to each motor
+  motorSigma(tl, tlSpeed);
+  motorSigma(tr, trSpeed);
+  motorSigma(bl, blSpeed);
+  motorSigma(br, brSpeed);
 }
